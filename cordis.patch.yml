@@ -1,0 +1,19 @@
+# dsh-subpages bundle patch（package.json 的 dsh.bundle.patch 指向本文件）
+#
+# 这个文件是本插件作为一个 profile 层级的全部声明：一行 insert。
+# 通过官方 CLI 安装时（dsh plugin --profile web add <spec>），`dsh plugin` 会把包名
+# 追加进 profile 的 dsh.profile.bundles —— 不需要手改 profile 任何文件。
+#
+# 可选配置（也可用环境变量覆盖，见 README「配置」）：
+#
+#   - insert:
+#       - id: subpages
+#         name: dsh-subpages
+#         config:
+#           mountPath: /subpages      # 网关前缀，默认 /subpages
+#           pagesDirs: []             # 额外的子页面目录（绝对路径），默认只用包内 pages/
+#           requestTimeoutMs: 15000   # 转发到子页面的超时
+#
+- insert:
+    - id: subpages
+      name: dsh-subpages

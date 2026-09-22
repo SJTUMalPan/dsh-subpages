@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>子页面 · DSH</title>
+<!-- 公共样式与脚本地址由宿主在渲染时注入（占位符替换），子页面开发者不需要关心 -->
+<link rel="stylesheet" href="__ASSET_BASE__/subpage.css">
+</head>
+<body>
+<div class="sp-shell">
+  <nav class="sp-nav">
+    <span class="sp-nav__brand">子页面</span>
+    <div class="sp-nav__list" id="tabs"></div>
+    <span class="sp-nav__spacer"></span>
+    <button type="button" class="sp-nav__action" id="reload" title="重新加载当前子页面">刷新</button>
+    <button type="button" class="sp-nav__action" id="standalone" title="在新标签页单独打开当前子页面">单独打开</button>
+  </nav>
+  <div class="sp-frame-wrap" id="stage">
+    <div class="sp-state" id="state">
+      <p class="sp-state__title" id="state-title">载入中…</p>
+      <p class="sp-state__hint" id="state-hint"></p>
+      <pre class="sp-state__code" id="state-code" hidden></pre>
+    </div>
+    <iframe class="sp-frame" id="frame" hidden referrerpolicy="no-referrer"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"></iframe>
+  </div>
+</div>
+<script>
+/*
+ * 门户壳：导航栏 + iframe + hash 路由。
+ *
+ * 为什么要壳：DSH 客户端没有 URL 路由（刷新即回到对话、无法收藏），而子页面需要
+ * 可收藏、可深链、刷新不丢。壳把「当前在哪个子页面」放进 location.hash，
+ * 于是浏览器前进/后退/刷新都是自然行为。
+ *
+ * 不做的事：
+ *   - 不做子页面之间的通信（postMessage 协议刻意不引入）。
+ *   - 不代理任何数据：iframe 里的页面自己请求 __MOUNT__/<id>/…，由宿主网关转发。
+ */
+(function () {
+  var ASSET_BASE = '__ASSET_BASE__';
+  var API_BASE = '__API_BASE__';
+  var MOUNT_BASE = '__MOUNT_BASE__';
+
+  var tabsEl = document.getElementById('tabs');
+  var frame = document.getElementById('frame');
+  var stateEl = document.getElementById('state');
+  var stateTitle = document.getElementById('state-title');
+  var stateHint = document.getElementById('state-hint');
+  var stateCode = document.getElementById('state-code');
+
+  var pages = [];
+  var health = Object.create(null);
+
+  function showState(title, hint, code) {
+    frame.hidden = true;
+    stateEl.hidden = false;
+    stateTitle.textContent = title;
+    stateHint.textContent = hint || '';
+    if (code) { stateCode.hidden = false; stateCode.textContent = code; }
+    else { stateCode.hidden = true; stateCode.textContent = ''; }
+  }
+
+  function showFrame(src) {
+    stateEl.hidden = true;
+    frame.hidden = false;
+    if (frame.getAttribute('src') !== src) frame.setAttribute('src', src);
+  }
+
+  function currentId() {
+    var hash = location.hash.replace(/^#\/?/, '');
+    return hash === '' ? null : decodeURIComponent(hash);
+  }
+
+  function renderTabs() {
+    tabsEl.textContent = '';
+    pages.filter(function (page) { return !page.hidden; }).forEach(function (page) {
+      var a = document.createElement('a');
+      a.className = 'sp-nav__item';
+      a.href = '#/' + encodeURIComponent(page.id);
+      a.textContent = page.title || page.id;
+      if (currentId() === page.id) a.setAttribute('aria-current', 'page');
+      tabsEl.appendChild(a);
+    });
+  }
+
+  function render() {
+    renderTabs();
+    var id = currentId();
+
+    if (pages.length === 0) {
+      showState('还没有挂载任何子页面',
+        '把子页面目录放进本插件的 pages/ 下（每个目录一个 subpage.json），然后重启 dsh web。');
+      return;
+    }
+    if (id === null) {
+      // 没指定就落在第一个：少一次点击。
+      location.replace('#/' + encodeURIComponent(pages[0].id));
+      return;
+    }
+    var page = null;
+    for (var i = 0; i < pages.length; i++) if (pages[i].id === id) page = pages[i];
+    if (page === null) {
+      showState('未挂载的子页面：' + id,
+        '清单里没有这个 id。可能是目录被删除、清单非法，或 subpage.json 里的 id 与目录名不一致。',
+        'GET ' + API_BASE + '/pages');
+      return;
+    }
+    if (health[id] === false) {
+      showState('子页面离线：' + (page.title || page.id),
+        '宿主活着，但它连不上下游服务。请确认该子页面的服务已启动，然后点右上角「刷新」。',
+        page.target ? '目标：' + page.target : '静态子页面（文件缺失）');
+      return;
+    }
+    showFrame(MOUNT_BASE + '/' + encodeURIComponent(page.id) + '/');
+  }
+
+  async function probe(id) {
+    try {
+      var res = await fetch(API_BASE + '/pages/' + encodeURIComponent(id) + '/health', { cache: 'no-store' });
+      var data = await res.json();
+      health[id] = data.ok === true;
+    } catch (error) {
+      health[id] = false;
+    }
+  }
+
+  async function boot() {
+    try {
+      var res = await fetch(API_BASE + '/pages', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      pages = Array.isArray(data.pages) ? data.pages : [];
+    } catch (error) {
+      showState('无法读取子页面清单',
+        '宿主网关没有响应。可能是插件未装载，或当前会话已失效（刷新页面重新登录）。',
+        String(error && error.message ? error.message : error));
+      return;
+    }
+    var id = currentId();
+    if (id !== null && pages.some(function (p) { return p.id === id; })) await probe(id);
+    render();
+  }
+
+  window.addEventListener('hashchange', function () {
+    var id = currentId();
+    if (id !== null) { probe(id).then(render); } else { render(); }
+  });
+
+  document.getElementById('reload').addEventListener('click', function () {
+    var id = currentId();
+    if (id === null) return;
+    health[id] = undefined;
+    probe(id).then(function () {
+      if (health[id] !== false) {
+        // 强制重新加载 iframe：重设 src 到同一地址不会触发重载，先清空。
+        var src = frame.getAttribute('src');
+        frame.setAttribute('src', 'about:blank');
+        render();
+        if (src) frame.setAttribute('src', src);
+      } else { render(); }
+    });
+  });
+
+  document.getElementById('standalone').addEventListener('click', function () {
+    var id = currentId();
+    if (id !== null) window.open(MOUNT_BASE + '/' + encodeURIComponent(id) + '/', '_blank', 'noopener');
+  });
+
+  frame.addEventListener('error', function () {
+    var id = currentId();
+    if (id !== null) { health[id] = false; render(); }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

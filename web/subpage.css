@@ -1,0 +1,263 @@
+/*
+ * dsh-subpages 公共前端库。
+ *
+ * 三层，顺序不能变：
+ *   1. vendor/pico.classless.min.css —— Pico 2 的无类变体（语义化 HTML 直接好看）
+ *   2. 本文件的 token 层 —— 深色配色 + 字体栈，覆盖 Pico 的 CSS 变量
+ *   3. 少量组件类名 —— 子页面可以不用；用了就与宿主风格一致
+ *
+ * 子页面只需在 <head> 里引一行（路径由宿主提供，版本天然一致）：
+ *   <link rel="stylesheet" href="/subpages/_assets/subpage.css">
+ *
+ * 设计约束：
+ *   - **不内嵌任何字体文件**：中文字重动辄数 MB，与「依赖尽量少」冲突；用 OS 字体栈。
+ *   - **只做深色**（与 DSH 当前主题一致）。
+ *   - 不用 CSS 预处理器、不用构建步骤：这是子页面能零工具链接入的前提。
+ */
+
+:root {
+  /* 深色配色：贴近 DSH 的暗色界面 */
+  --pico-background-color: #16181d;
+  --pico-color: #e6e8ec;
+  --pico-muted-color: #9aa2ad;
+  --pico-muted-border-color: #2a2e37;
+  --pico-primary: #4c8dff;
+  --pico-primary-background: #2f6fe4;
+  --pico-primary-border: #2f6fe4;
+  --pico-primary-hover-background: #3d7cf0;
+  --pico-primary-hover-border: #3d7cf0;
+  --pico-primary-focus: rgba(76, 141, 255, 0.25);
+  --pico-primary-inverse: #ffffff;
+  --pico-secondary: #9aa2ad;
+  --pico-secondary-background: #262a33;
+  --pico-secondary-border: #333844;
+  --pico-secondary-hover-background: #2f343f;
+  --pico-form-element-background-color: #1d2027;
+  --pico-form-element-border-color: #333844;
+  --pico-form-element-color: #e6e8ec;
+  --pico-form-element-placeholder-color: #7b828d;
+  --pico-card-background-color: #1d2027;
+  --pico-card-border-color: #2a2e37;
+  --pico-card-sectioning-background-color: #1a1d24;
+  --pico-code-background-color: #1a1d24;
+  --pico-code-color: #d7dbe2;
+  --pico-table-border-color: #2a2e37;
+  --pico-table-row-stripped-background-color: #1a1d24;
+  --pico-border-radius: 8px;
+  --pico-spacing: 1rem;
+  --pico-typography-spacing-vertical: 0.85rem;
+
+  /* 字体：全部走系统字体，含中文回退 */
+  --pico-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC",
+    Roboto, Helvetica, Arial, sans-serif;
+  --pico-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  --pico-font-size: 100%;
+  --pico-line-height: 1.6;
+
+  /* 本插件自己的补充 token */
+  --sp-radius: 10px;
+  --sp-gap: 12px;
+  --sp-border: 1px solid var(--pico-muted-border-color);
+  --sp-surface: #1d2027;
+  --sp-surface-2: #22262e;
+  --sp-ok: #3fb950;
+  --sp-warn: #d29922;
+  --sp-error: #f85149;
+}
+
+/* 让整页铺满，避免 Pico 默认的窄容器在大屏上留下大片空白 */
+body {
+  margin: 0;
+  background: var(--pico-background-color);
+  color: var(--pico-color);
+}
+
+/* ── 门户壳（由宿主渲染，子页面不用管） ───────────────────────────── */
+
+.sp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.sp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-gap);
+  padding: 8px 14px;
+  background: var(--sp-surface-2);
+  border-bottom: var(--sp-border);
+  flex: 0 0 auto;
+}
+
+.sp-nav__brand {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--pico-muted-color);
+  letter-spacing: 0.02em;
+  padding-right: 6px;
+  border-right: var(--sp-border);
+  margin-right: 2px;
+}
+
+.sp-nav__list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sp-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.sp-nav__item:hover {
+  background: var(--pico-secondary-background);
+  color: var(--pico-color);
+}
+
+.sp-nav__item[aria-current="page"] {
+  background: var(--pico-primary-background);
+  border-color: var(--pico-primary-border);
+  color: var(--pico-primary-inverse);
+}
+
+.sp-nav__spacer { flex: 1 1 auto; }
+
+.sp-nav__action {
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: var(--sp-border);
+  background: transparent;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+
+.sp-nav__action:hover { color: var(--pico-color); background: var(--pico-secondary-background); }
+
+.sp-frame-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+
+.sp-frame {
+  border: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: var(--pico-background-color);
+}
+
+.sp-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  background: var(--pico-background-color);
+}
+
+.sp-state__title { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.sp-state__hint { color: var(--pico-muted-color); font-size: 0.9rem; margin: 0; max-width: 46ch; }
+.sp-state__code {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-code-background-color);
+  padding: 6px 10px;
+  border-radius: 6px;
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}
+
+.sp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: var(--sp-border);
+  color: var(--pico-muted-color);
+}
+
+.sp-badge--ok { color: var(--sp-ok); border-color: color-mix(in srgb, var(--sp-ok) 40%, transparent); }
+.sp-badge--warn { color: var(--sp-warn); border-color: color-mix(in srgb, var(--sp-warn) 40%, transparent); }
+.sp-badge--error { color: var(--sp-error); border-color: color-mix(in srgb, var(--sp-error) 40%, transparent); }
+
+/* ── 给子页面用的可选组件类名（不用也可以） ───────────────────────── */
+
+.sp-page { max-width: 1080px; margin: 0 auto; padding: 20px 18px 48px; }
+.sp-page__head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.sp-page__title { font-size: 1.25rem; font-weight: 600; margin: 0; }
+.sp-page__sub { color: var(--pico-muted-color); font-size: 0.85rem; }
+
+.sp-card {
+  background: var(--pico-card-background-color);
+  border: var(--sp-border);
+  border-radius: var(--sp-radius);
+  padding: 14px 16px;
+  margin-bottom: var(--sp-gap);
+}
+
+.sp-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+.sp-empty {
+  text-align: center;
+  color: var(--pico-muted-color);
+  padding: 40px 16px;
+  border: 1px dashed var(--pico-muted-border-color);
+  border-radius: var(--sp-radius);
+}
+
+.sp-list { display: flex; flex-direction: column; gap: 10px; }
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--pico-card-background-color);
+  border: var(--sp-border);
+  border-radius: var(--sp-radius);
+  padding: 12px 14px;
+}
+
+.sp-row__main { flex: 1 1 auto; min-width: 0; }
+.sp-row__title { font-weight: 550; margin: 0 0 3px; overflow-wrap: anywhere; }
+.sp-row__meta { color: var(--pico-muted-color); font-size: 0.8rem; display: flex; gap: 10px; flex-wrap: wrap; }
+.sp-row__actions { flex: 0 0 auto; display: flex; gap: 8px; }
+
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: var(--sp-border);
+  background: var(--pico-secondary-background);
+  color: var(--pico-color);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.sp-btn:hover { background: var(--pico-secondary-hover-background); }
+.sp-btn--primary { background: var(--pico-primary-background); border-color: var(--pico-primary-border); color: var(--pico-primary-inverse); }
+.sp-btn--primary:hover { background: var(--pico-primary-hover-background); }
+.sp-btn--danger { color: var(--sp-error); }
+.sp-btn[disabled] { opacity: 0.5; cursor: not-allowed; }

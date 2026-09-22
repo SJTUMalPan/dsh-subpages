@@ -1,0 +1,48 @@
+{
+  "name": "dsh-subpages",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "DSH 子页面宿主：复用 DSH 端口提供 /subpages 网关与统一门户，把独立开发的下级页面一键挂载进来",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./registry": "./lib/registry.mjs",
+    "./proxy": "./lib/proxy.mjs",
+    "./assets": "./lib/assets.mjs",
+    "./package.json": "./package.json",
+    "./client": "./lib/client.js"
+  },
+  "files": [
+    "lib",
+    "web",
+    "pages",
+    "docs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test --test-timeout=30000 test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "portal",
+    "subpages"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  }
+}
