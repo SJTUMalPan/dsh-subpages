@@ -26,7 +26,7 @@ import {
   scanPagesDir,
   SubPageRegistry,
 } from '../lib/registry.mjs'
-import { forwardHeaders, resolveWithin, responseHeaders, subPathOf } from '../lib/proxy.mjs'
+import { forwardHeaders, injectSharedStyle, resolveWithin, responseHeaders, subPathOf } from '../lib/proxy.mjs'
 import { readWebAsset, renderShell } from '../lib/assets.mjs'
 import { apply } from '../lib/index.js'
 
@@ -281,11 +281,43 @@ describe('路径与转发头', () => {
     assert.equal(responseHeaders({ location: '/todos' }, base).location, '/subpages/notify-hub/todos')
     // 绝对 URL（跨域）与相对路径不动
     assert.equal(responseHeaders({ location: 'https://other.example/x' }, base).location, 'https://other.example/x')
+    // 幂等：下游已经带了前缀时不再重复拼（否则 303 会自指 → 浏览器重定向循环）
+    assert.equal(responseHeaders({ location: '/subpages/notify-hub/todos' }, base).location, '/subpages/notify-hub/todos')
+    assert.equal(responseHeaders({ location: '/subpages/notify-hub' }, base).location, '/subpages/notify-hub')
+    assert.equal(responseHeaders({ location: '/todos' }, '').location, '/todos')
+    // 子页面自己的「根路径跳转」在网关后面是多余的：直接落在子页面首页
+    assert.equal(responseHeaders({ location: '/' }, base).location, '/subpages/notify-hub/')
     assert.equal(responseHeaders({ location: 'next.html' }, base).location, 'next.html')
     // hop-by-hop 仍被丢弃，其余头保留
     const headers = responseHeaders({ 'transfer-encoding': 'chunked', 'content-type': 'text/html' }, base)
     assert.equal(headers['transfer-encoding'], undefined)
     assert.equal(headers['content-type'], 'text/html')
+  })
+
+  it('injectSharedStyle：inherit 时注入公共样式，并可选压掉子页面自带样式', () => {
+    const html = '<html><head><style>body{background:#fff}</style></head><body>x</body></html>'
+    const asset = '/subpages/_assets/subpage.css'
+
+    // standalone：一个字都不改
+    assert.equal(injectSharedStyle(html, { style: 'standalone', assetBase: asset }), html)
+
+    // inherit：注入 <link>，但保留子页面自己的样式（不破坏它的组件类名）
+    const kept = injectSharedStyle(html, { style: 'inherit', assetBase: asset })
+    assert.ok(kept.includes(`<link rel="stylesheet" href="${asset}">`), kept.slice(0, 200))
+    assert.ok(kept.includes('<style>body{background:#fff}</style>'), '默认不应删除子页面样式')
+
+    // inherit + stripOwnStyle：把自己的 <style> 压掉（由子页面显式选择）
+    const stripped = injectSharedStyle(html, { style: 'inherit', assetBase: asset, stripOwnStyle: true })
+    assert.equal(stripped.includes('<style>'), false)
+    assert.ok(stripped.includes(`href="${asset}"`))
+    // 注入位置必须在 </head> 之前
+    assert.ok(stripped.indexOf(`href="${asset}"`) < stripped.indexOf('</head>'))
+
+    // 没有 </head> 的碎片不做注入（宁可不改，也不猜）
+    assert.equal(injectSharedStyle('<div>x</div>', { style: 'inherit', assetBase: asset }), '<div>x</div>')
+    // 已经是 inherit 且已有该样式表时不重复注入
+    const once = injectSharedStyle(html, { style: 'inherit', assetBase: asset })
+    assert.equal(injectSharedStyle(once, { style: 'inherit', assetBase: asset }).split(asset).length - 1, 1)
   })
 
   it('forwardHeaders 在 queryParam 模式下不写认证头', () => {
@@ -336,15 +368,23 @@ describe('公共资源与门户壳', () => {
 
 describe('网关', () => {
   /** 装好插件并返回可用的上下文与路由。 */
-  async function setup({ pages, hold = false, config = {} } = {}) {
+  async function setup({ pages, hold = false, config = {}, upstream } = {}) {
     // 令牌来自环境变量（registry 默认读 process.env）。
     process.env.SVC_TOKEN = 'SVC_TOKEN'
-    const up = await openUpstream()
-    const root = await makePages(pages ?? [
+    const up = await openUpstream(upstream)
+    const specs = pages ?? [
       ['svc', { target: up.origin, title: '服务型', order: 10, auth: { tokenEnv: 'SVC_TOKEN' } }, {}],
       ['static-one', { target: './public', title: '静态型', order: 20 }, { 'public/index.html': '<h1>static</h1>', 'public/a.txt': 'A' }],
+      ['inherit-one', { target: ':UPSTREAM:', title: '继承型', order: 40, style: 'inherit' }, {}],
+      ['solo-one', { target: ':UPSTREAM:', title: '自带样式型', order: 50, style: 'standalone' }, {}],
       ['offline', { target: 'http://127.0.0.1:1', title: '离线型', order: 30 }, {}],
-    ])
+    ]
+    // 占位符替换对「默认清单」与「显式传入的清单」一视同仁——否则默认清单里的
+    // inherit-one 会指向字面量 :UPSTREAM:，测试表现为假的 404 / 离线。
+    for (const spec of specs) {
+      if (spec[1]?.target === ':UPSTREAM:') spec[1].target = up.origin
+    }
+    const root = await makePages(specs)
     const { ctx, routes, provided } = makeCtx({ hold })
     apply(ctx, { pagesDirs: [root], probeTimeoutMs: 300, requestTimeoutMs: 2000, ...config })
     // apply 里的 scan 是异步的，等一拍让它落定。
@@ -432,6 +472,107 @@ describe('网关', () => {
     assert.equal(file.body, 'A')
     const escape = await callRoute(route, { url: '/subpages/static-one/../../../../etc/passwd' })
     assert.equal(escape.status, 404)
+  })
+
+  it('style=inherit 的子页面：HTML 响应被注入公共样式', async () => {
+    const upstream = (req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<html><head><title>t</title><style>.card{color:red}</style></head><body>hi</body></html>')
+    }
+    const { route } = await setup({ upstream })
+    const res = await callRoute(route, {
+      url: '/subpages/inherit-one/',
+      headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' },
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.includes('/subpages/_assets/subpage.css'), '未注入公共样式')
+    // 默认保留子页面自带样式（不破坏它的组件类名）
+    assert.ok(res.body.includes('.card{color:red}'))
+    // 注入位置在 </head> 之前
+    assert.ok(res.body.indexOf('subpage.css') < res.body.indexOf('</head>'))
+  })
+
+  it('style=standalone 的子页面：HTML 一字不改', async () => {
+    const upstream = (req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<html><head></head><body>hi</body></html>')
+    }
+    const { route } = await setup({ upstream })
+    const res = await callRoute(route, {
+      url: '/subpages/solo-one/',
+      headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.includes('subpage.css'), false)
+    assert.equal(res.body, '<html><head></head><body>hi</body></html>')
+  })
+
+  it('下游用 Set-Cookie 开启会话：宿主收下 cookie、改写跳转，浏览器只走一跳', async () => {
+    // 模拟 notify-hub：带令牌的请求回 303 + Set-Cookie，并跳向它自己的根路径。
+    const seen = []
+    const upstream = (req, res) => {
+      seen.push({ url: req.url, cookie: req.headers.cookie })
+      if (req.headers.cookie === undefined) {
+        res.writeHead(303, {
+          location: '/todos',
+          'set-cookie': 'nh_session=abc123; HttpOnly; Path=/; SameSite=Lax',
+        })
+        res.end()
+        return
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<html><head></head><body>会话已建立</body></html>')
+    }
+    const { route } = await setup({ upstream })
+
+    // 第一跳：浏览器只看到「跳回该子页面根路径」，且**没有** set-cookie
+    const first = await callRoute(route, {
+      url: '/subpages/svc/',
+      headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' },
+    })
+    assert.equal(first.status, 303)
+    assert.equal(first.headers.location, '/subpages/svc/')
+    assert.equal(first.headers['set-cookie'], undefined, '下游 cookie 不得透给浏览器')
+
+    // 第二跳：宿主用持有的 cookie 请求下游，拿到真正的页面
+    const second = await callRoute(route, {
+      url: '/subpages/svc/',
+      headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' },
+    })
+    assert.equal(second.status, 200)
+    assert.match(second.body, /会话已建立/)
+    assert.equal(seen[1].cookie, 'nh_session=abc123', '第二跳应带上宿主持有的会话 cookie')
+    // 有会话之后不再注入令牌（否则下游又会发起换 cookie 跳转）
+    assert.equal(seen[1].url.includes('token='), false)
+  })
+
+  it('会话失效（401）时宿主丢弃会话并用令牌重试一次', async () => {
+    const seen = []
+    let first = true
+    const upstream = (req, res) => {
+      // svc 的认证方式是请求头（tokenEnv → Authorization: Bearer …）
+      seen.push({ url: req.url, cookie: req.headers.cookie, auth: req.headers.authorization })
+      if (first) {
+        first = false
+        res.writeHead(200, { 'set-cookie': 'nh_session=stale; Path=/' })
+        res.end('ok')
+        return
+      }
+      if (req.headers.cookie === 'nh_session=stale') {
+        res.writeHead(401, { 'content-type': 'text/plain' })
+        res.end('unauthorized')
+        return
+      }
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end('retried-with-token')
+    }
+    const { route } = await setup({ upstream })
+    await callRoute(route, { url: '/subpages/svc/' })              // 建立（过期）会话
+    const res = await callRoute(route, { url: '/subpages/svc/' })  // 触发 401 → 丢弃会话重试
+    assert.equal(res.status, 200)
+    assert.equal(res.body, 'retried-with-token')
+    assert.equal(seen[2].cookie, undefined, '重试必须丢掉过期会话')
+    assert.equal(seen[2].auth, 'Bearer SVC_TOKEN', '重试应改用令牌')
   })
 
   it('未注册 id 返回 404 且是明确的错误页', async () => {

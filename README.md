@@ -63,11 +63,19 @@ dsh plugin --profile web add "git+https://github.com/<你>/dsh-subpages#<sha>"
 | `target` | **是** | `http://…` 表示反向代理到该服务；相对/绝对路径表示静态目录 |
 | `index` | 否 | 静态形态的默认文件，缺省 `index.html` |
 | `health` | 否 | 代理形态的探活路径，缺省 `/healthz` |
-| `style` | 否 | `inherit`（用宿主公共样式）或 `standalone`（自带样式） |
+| `style` | 否 | `inherit`（**默认**，宿主在导航类 HTML 响应里注入公共样式）或 `standalone`（完全不注入） |
+| `stripOwnStyle` | 否 | 仅 `inherit` 有意义：压掉子页面自带的 `<style>`（前提是它已按公共约定重写标记） |
 | `hidden` | 否 | 为 `true` 时不在导航栏显示（仍可直接访问） |
 | `auth` | 否 | 下游凭据，见下 |
 
 ### auth：令牌只留在服务端
+
+宿主还会替浏览器完成「令牌 → 会话 cookie」的交换并**持有该 cookie**：下游用 `Set-Cookie`
+开启会话时，宿主收下它、把跳转改写成「回到该子页面根路径」，后续请求附带 cookie 而不再
+注入令牌；cookie 失效（401/403）时丢弃并重试一次。结果是浏览器**既看不到令牌、也拿不到
+下游 cookie**，凭证全在服务端。下游把首页跳走（如 `/` → `/todos`）也由宿主在服务端跟掉，
+浏览器始终只看到一次 200。
+
 
 ```json
 "auth": { "tokenEnv": "MY_SERVICE_TOKEN", "header": "Authorization", "scheme": "Bearer" }
