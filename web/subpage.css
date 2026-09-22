@@ -225,6 +225,10 @@ body {
   border-radius: var(--sp-radius);
 }
 
+/* 窄屏表格横向滚动，不让宽表撑破页面 */
+.sp-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sp-table-wrap > table { margin-bottom: 0; }
+
 .sp-list { display: flex; flex-direction: column; gap: 10px; }
 
 .sp-row {
