@@ -130,6 +130,36 @@ ctx.subPages.mountPath     // '/subpages'
     probeTimeoutMs: 2000        # 探活超时
 ```
 
+## 启动通告（把访问链接发到飞书）
+
+每次 DSH 启动时，把「带 token 的访问链接」投递到 notify-hub（它再转发到飞书/其它渠道），
+手机上点开即用。配置在 profile 的插件行里（本仓库 `cordis.patch.yml` 已给出可用样例）：
+
+```yaml
+- id: subpages
+  config:
+    startupNotice:
+      enabled: true                             # 必须显式打开
+      publicHost: 47.109.102.36                 # 对外主机（IP 或域名）
+      tokenFile: /root/notify-hub-run/config.yaml
+      tokenPath: server.auth_token              # 凭据直接读下游自己的配置，不新增一份
+      logPath: /tmp/dsh-web.log                 # 启动横幅所在文件
+```
+
+要点与坑：
+
+- token 的唯一来源是启动横幅（DSH 把它存在连接服务的进程私有状态里，插件取不到内存，
+  也没有落盘文件），所以这里读启动日志——并且**只认本次启动新增的字节**，
+  否则会把上一次启动的旧 token 发出去（一条死链）。
+- 插件可能先于横幅打印完成装载，所以会**等横幅**（默认 30 秒），且这段等待不阻塞启动。
+- 未配置 `publicHost` 时**不投递**：宁可漏发，也不发一条错链接。
+
+手动重启（重启完成后同样会把新链接发到飞书）：
+
+```bash
+setsid nohup bash /workspace/dsh-restart-notify.sh >/dev/null 2>&1 < /dev/null &
+```
+
 ## 排障
 
 | 现象 | 原因与处理 |
@@ -138,7 +168,8 @@ ctx.subPages.mountPath     // '/subpages'
 | 门户显示「还没有挂载任何子页面」 | `pages/` 下没有带 `subpage.json` 的目录，或清单非法（启动日志有 warning） |
 | 显示「未挂载的子页面：x」 | 清单 `id` 与访问的 id 不一致，或清单非法被跳过 |
 | 显示「子页面离线」 | 下游服务没起，或 `target` 写错。点右上「刷新」重试；`health` 路径也可核对 |
-| 子页面里的链接跳出网关（404） | 下游返回了**绝对 URL** 的重定向（宿主只重写以 `/` 开头的 `Location`）。需要下游改用相对跳转 |
+| 子页面里的链接跳出网关（404） | 下游返回了**绝对 URL** 的重定向（宿主只重写以 `/` 开头的 `Location`）。需要下游改用相对跳转。链接类（`href`/`src`/`action`）宿主会自动改写，无需下游配合 |
+| 门户里「一直载入中」 | 已修（`[hidden]` 被作者 `display` 覆盖）。若仍复现，用 `<mountPath>/?debug=1` 看诊断面板：fetch 状态码、iframe 的 load/error、内容长度 |
 | 401 | DSH 登录态失效。刷新 DSH 页面重新登录即可——网关复用 DSH 鉴权，没有第二套凭据 |
 
 ## 开发
@@ -159,6 +190,8 @@ cd dsh-subpages && npm test    # = node --test test/*.test.mjs
 | `lib/registry.mjs` | 清单校验/扫描/排序 + 令牌解析 + 浏览器可见投影 |
 | `lib/proxy.mjs` | 反代、静态投递、请求头与响应头策略（令牌注入、Location 重写） |
 | `lib/assets.mjs` | 公共资源投递与门户壳模板渲染 |
+| `lib/sessions.mjs` | 下游会话代持 + `Location` 改写（幂等、根路径归一） |
+| `lib/startup-notice.mjs` | 启动通告：等新增横幅 → 读凭据 → 投递到 notify-hub |
 | `lib/client.js` | 客户端半（手写闭包工厂）：侧边栏入口按钮 |
 | `web/shell.html` | 门户壳：导航栏 + iframe + hash 路由 |
 | `web/subpage.css` | 公共前端库（token 层 + 组件类名） |
