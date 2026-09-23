@@ -26,9 +26,10 @@ import {
   scanPagesDir,
   SubPageRegistry,
 } from '../lib/registry.mjs'
-import { forwardHeaders, injectSharedStyle, resolveWithin, responseHeaders, subPathOf } from '../lib/proxy.mjs'
+import { forwardHeaders, injectSharedStyle, resolveWithin, responseHeaders, rewriteRootPaths, subPathOf } from '../lib/proxy.mjs'
 import { readWebAsset, renderShell } from '../lib/assets.mjs'
 import { apply } from '../lib/index.js'
+import { parseBanner, readValueFromYaml, buildStartupBody, runStartupNotice, deliverStartupNotice } from '../lib/startup-notice.mjs'
 
 // ── 测试脚手架 ────────────────────────────────────────────────────────────
 
@@ -71,8 +72,9 @@ async function makePages(specs) {
 function makeCtx({ hold = false } = {}) {
   const routes = []
   const provided = {}
+  const warnings = []
   const ctx = {
-    logger: { info() {}, warn() {}, error() {} },
+    logger: { info() {}, warn(...a) { warnings.push(a.join(' ')) }, error(...a) { warnings.push(a.join(' ')) } },
     connection: {
       // 记录调用次数即可证明「每个请求都先过鉴权」。
       calls: 0,
@@ -90,7 +92,7 @@ function makeCtx({ hold = false } = {}) {
     effect(fn) { const dispose = fn(); return () => { if (typeof dispose === 'function') dispose() } },
     reflect: { provide(name, value) { provided[name] = value; return () => { delete provided[name] } } },
   }
-  return { ctx, routes, provided }
+  return { ctx, routes, provided, warnings }
 }
 
 /** 把一次请求打进注册好的路由，返回 { status, headers, body }。 */
@@ -318,6 +320,35 @@ describe('路径与转发头', () => {
     // 已经是 inherit 且已有该样式表时不重复注入
     const once = injectSharedStyle(html, { style: 'inherit', assetBase: asset })
     assert.equal(injectSharedStyle(once, { style: 'inherit', assetBase: asset }).split(asset).length - 1, 1)
+  })
+
+  it('rewriteRootPaths：把根路径链接改写到挂载前缀下（否则打到 DSH 自己的路由）', () => {
+    const base = '/subpages/notify-hub'
+    const html = [
+      '<a href="/todos">待办</a>',
+      "<a href='/messages'>消息</a>",
+      '<form method="post" action="/todos/3/done">',
+      '<img src="/logo.png">',
+      '<a href="//cdn.example.com/x.js">外站</a>',
+      '<a href="#top">锚点</a>',
+      '<a href="mailto:a@b.c">邮件</a>',
+      '<a href="https://x.example/y">绝对 URL</a>',
+      '<a href="/subpages/notify-hub/todos">已带前缀</a>',
+    ].join('\n')
+    const out = rewriteRootPaths(html, { publicBase: base })
+    assert.ok(out.includes('href="/subpages/notify-hub/todos"'), out)
+    assert.ok(out.includes("href='/subpages/notify-hub/messages'"), out)
+    assert.ok(out.includes('action="/subpages/notify-hub/todos/3/done"'), out)
+    assert.ok(out.includes('src="/subpages/notify-hub/logo.png"'), out)
+    // 不该被动到的
+    assert.ok(out.includes('href="//cdn.example.com/x.js"'))
+    assert.ok(out.includes('href="#top"'))
+    assert.ok(out.includes('href="mailto:a@b.c"'))
+    assert.ok(out.includes('href="https://x.example/y"'))
+    // 幂等：已带前缀的不再重复拼
+    assert.equal(out.includes('/subpages/notify-hub/subpages/notify-hub'), false)
+    // 前缀为空时原样返回
+    assert.equal(rewriteRootPaths(html, { publicBase: '' }), html)
   })
 
   it('forwardHeaders 在 queryParam 模式下不写认证头', () => {
@@ -600,6 +631,14 @@ describe('网关', () => {
     assert.deepEqual(JSON.parse(offline.body), { ok: false, reason: 'offline' })
     const missing = await callRoute(route, { url: '/subpages/_api/pages/nope/health' })
     assert.deepEqual(JSON.parse(missing.body), { ok: false, reason: 'not-mounted' })
+  })
+
+  it('未显式启用时不产生启动通告（不能默认打开）', async () => {
+    const { ctx, warnings } = makeCtx()
+    // 不传 startupNotice：apply 应立即返回，不留任何等横幅的后台任务
+    apply(ctx, { pagesDirs: [], startupNotice: undefined })
+    await new Promise((r) => setTimeout(r, 50))
+    assert.equal(warnings.length, 0, '未启用时不该去等横幅或告警')
   })
 
   it('mountPath 可配置', async () => {

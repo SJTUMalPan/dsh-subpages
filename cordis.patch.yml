@@ -17,3 +17,12 @@
 - insert:
     - id: subpages
       name: dsh-subpages
+      config:
+        # 每次 DSH 启动把「带 token 的访问链接」投递到 notify-hub（进而转发到飞书）。
+        # 凭据不新增：直接从 notify-hub 自己的 config.yaml 里读。
+        startupNotice:
+          enabled: true
+          publicHost: 47.109.102.36                 # 对外主机（IP 或域名）
+          tokenFile: /root/notify-hub-run/config.yaml
+          tokenPath: server.auth_token
+          logPath: /tmp/dsh-web.log                 # 启动横幅所在文件（run-dsh.sh 重定向到此）
