@@ -350,7 +350,7 @@ describe('公共资源与门户壳', () => {
     assert.equal(html.includes('__ASSET_BASE__'), false)
     assert.equal(html.includes('__API_BASE__'), false)
     assert.equal(html.includes('__MOUNT_BASE__'), false)
-    assert.match(html, /\/subpages\/_assets\/subpage\.css/)
+    assert.match(html, /\/subpages\/_assets\/subpage\.css/)  // 允许带 ?v= 版本串
   })
 
   it('Pico 已本地化：不依赖任何外网 CDN 才能取到样式', async () => {

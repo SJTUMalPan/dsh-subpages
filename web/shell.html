@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>子页面 · DSH</title>
 <!-- 公共样式与脚本地址由宿主在渲染时注入（占位符替换），子页面开发者不需要关心 -->
-<link rel="stylesheet" href="__ASSET_BASE__/subpage.css">
+<link rel="stylesheet" href="__ASSET_BASE__/subpage.css?v=2">
 </head>
 <body>
 <div class="sp-shell">
@@ -17,6 +17,7 @@
     <button type="button" class="sp-nav__action" id="standalone" title="在新标签页单独打开当前子页面">单独打开</button>
   </nav>
   <div class="sp-frame-wrap" id="stage">
+    <pre class="sp-state__code" id="diag" hidden style="position:absolute;left:8px;bottom:8px;z-index:9;max-width:70ch;max-height:40vh;overflow:auto;margin:0"></pre>
     <div class="sp-state" id="state">
       <p class="sp-state__title" id="state-title">载入中…</p>
       <p class="sp-state__hint" id="state-hint"></p>
@@ -42,6 +43,8 @@
   var ASSET_BASE = '__ASSET_BASE__';
   var API_BASE = '__API_BASE__';
   var MOUNT_BASE = '__MOUNT_BASE__';
+  /* 壳版本：改壳行为时递增，让 iframe 文档不去命中旧缓存。 */
+  var SHELL_VERSION = '2';
 
   var tabsEl = document.getElementById('tabs');
   var frame = document.getElementById('frame');
@@ -113,12 +116,14 @@
         page.target ? '目标：' + page.target : '静态子页面（文件缺失）');
       return;
     }
-    showFrame(MOUNT_BASE + '/' + encodeURIComponent(page.id) + '/');
+    // 带壳版本查询串：避免浏览器复用旧版本的 iframe 文档。
+    showFrame(MOUNT_BASE + '/' + encodeURIComponent(page.id) + '/?sp_shell=' + SHELL_VERSION);
   }
 
   async function probe(id) {
     try {
       var res = await fetch(API_BASE + '/pages/' + encodeURIComponent(id) + '/health', { cache: 'no-store' });
+      logDiag('GET health/' + id + ' -> ' + res.status);
       var data = await res.json();
       health[id] = data.ok === true;
     } catch (error) {
@@ -129,6 +134,7 @@
   async function boot() {
     try {
       var res = await fetch(API_BASE + '/pages', { cache: 'no-store' });
+      logDiag('GET ' + API_BASE + '/pages -> ' + res.status);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       pages = Array.isArray(data.pages) ? data.pages : [];
@@ -166,6 +172,36 @@
   document.getElementById('standalone').addEventListener('click', function () {
     var id = currentId();
     if (id !== null) window.open(MOUNT_BASE + '/' + encodeURIComponent(id) + '/', '_blank', 'noopener');
+  });
+
+  /* ── 诊断（?debug=1）──────────────────────────────────────────────────
+     壳本身好用时（导航栏出现）却"一直载入中"，说明问题在 iframe 这一层。
+     这个面板不猜原因，直接把现场打到页面上：fetch 状态码、iframe 的 load/error
+     事件、以及能否读到 iframe 内部（跨源/被拦时会读不到）。 */
+  var DEBUG = /[?&]debug=1/.test(location.search);
+  var diag = [];
+  function logDiag(msg) {
+    diag.push(new Date().toISOString().slice(11, 19) + '  ' + msg);
+    if (DEBUG) {
+      var el = document.getElementById('diag');
+      if (el) { el.hidden = false; el.textContent = diag.join('\n'); }
+    }
+  }
+
+  frame.addEventListener('load', function () {
+    var url = '';
+    try { url = frame.contentWindow.location.href; } catch (e) { url = '(读不到：' + e.name + ')'; }
+    logDiag('iframe load: ' + url);
+    if (url === 'about:blank') return;
+    // 能读到内容窗口 = 同源正常；此时若还是空白，就是子页面自身的问题
+    try {
+      var len = (frame.contentDocument && frame.contentDocument.body)
+        ? frame.contentDocument.body.innerText.length : -1;
+      logDiag('iframe 内容长度: ' + len);
+      if (len === 0) showState('子页面返回了空白内容', 'iframe 已加载但内容为空，请点「单独打开」对比。', url);
+    } catch (e) {
+      logDiag('读取 iframe 失败: ' + e.name);
+    }
   });
 
   frame.addEventListener('error', function () {

@@ -67,6 +67,13 @@
   --sp-error: #f85149;
 }
 
+/* 关键修复：`[hidden]` 的默认样式是 `display:none`，但**作者样式里的 display
+   会覆盖它**。本文件的 .sp-state{display:flex} 与 .sp-frame{display:block} 恰好
+   把 hidden 顶掉了——结果状态层"载入中"永远盖在画面上（实测踩过：用户侧表现为
+   "一直显示加载中"，而服务端一切正常）。HTML 规范要求覆盖 hidden 时必须显式
+   处理，这里统一补上。 */
+[hidden] { display: none !important; }
+
 /* 让整页铺满，避免 Pico 默认的窄容器在大屏上留下大片空白 */
 body {
   margin: 0;

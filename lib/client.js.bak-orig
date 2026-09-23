@@ -58,7 +58,6 @@ window.__ModuleLoader__.load({
 
     return {
       name: 'subpages',
-      inject: ['slots'],
       /**
        * 注册入口按钮。`sidebar.footer.action` 是 DSH 侧边栏底部的动作座位
        * （与「设置」同排），它是 list 槽，可以放任意组件。
