@@ -1,0 +1,3 @@
+[submodule "pages/usage-stats"]
+	path = pages/usage-stats
+	url = git@github.com:SJTUMalPan/dsh-usage-stats.git
