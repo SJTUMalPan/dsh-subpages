@@ -4,15 +4,15 @@
  * 三层，顺序不能变：
  *   1. vendor/pico.classless.min.css —— Pico 2 的无类变体（语义化 HTML 直接好看）
  *   2. 本文件的 token 层 —— 深色配色 + 字体栈，覆盖 Pico 的 CSS 变量
- *   3. 少量组件类名 —— 子页面可以不用；用了就与宿主风格一致
+ *   3. 少量组件类名 —— 看板可以不用；用了就与宿主风格一致
  *
- * 子页面只需在 <head> 里引一行（路径由宿主提供，版本天然一致）：
+ * 看板只需在 <head> 里引一行（路径由宿主提供，版本天然一致）：
  *   <link rel="stylesheet" href="/subpages/_assets/subpage.css">
  *
  * 设计约束：
  *   - **不内嵌任何字体文件**：中文字重动辄数 MB，与「依赖尽量少」冲突；用 OS 字体栈。
  *   - **只做深色**（与 DSH 当前主题一致）。
- *   - 不用 CSS 预处理器、不用构建步骤：这是子页面能零工具链接入的前提。
+ *   - 不用 CSS 预处理器、不用构建步骤：这是看板能零工具链接入的前提。
  */
 
 :root {
@@ -81,7 +81,7 @@ body {
   color: var(--pico-color);
 }
 
-/* ── 门户壳（由宿主渲染，子页面不用管） ───────────────────────────── */
+/* ── 门户壳（由宿主渲染，看板不用管） ───────────────────────────── */
 
 .sp-shell {
   display: flex;
@@ -207,7 +207,7 @@ body {
 .sp-badge--warn { color: var(--sp-warn); border-color: color-mix(in srgb, var(--sp-warn) 40%, transparent); }
 .sp-badge--error { color: var(--sp-error); border-color: color-mix(in srgb, var(--sp-error) 40%, transparent); }
 
-/* ── 给子页面用的可选组件类名（不用也可以） ───────────────────────── */
+/* ── 给看板用的可选组件类名（不用也可以） ───────────────────────── */
 
 .sp-page { max-width: 1080px; margin: 0 auto; padding: 20px 18px 48px; }
 .sp-page__head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }

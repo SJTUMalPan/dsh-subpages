@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "description": "DSH 子页面宿主：复用 DSH 端口提供 /subpages 网关与统一门户，把独立开发的下级页面一键挂载进来",
+  "description": "DSH 看板宿主：复用 DSH 端口提供 /subpages 网关与统一门户，把独立开发的下级页面一键挂载进来",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

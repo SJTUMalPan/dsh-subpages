@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>子页面 · DSH</title>
-<!-- 公共样式与脚本地址由宿主在渲染时注入（占位符替换），子页面开发者不需要关心 -->
+<title>看板 · DSH</title>
+<!-- 公共样式与脚本地址由宿主在渲染时注入（占位符替换），看板开发者不需要关心 -->
 <link rel="stylesheet" href="__ASSET_BASE__/subpage.css?v=2">
 </head>
 <body>
 <div class="sp-shell">
   <nav class="sp-nav">
-    <span class="sp-nav__brand">子页面</span>
+    <span class="sp-nav__brand">看板</span>
     <div class="sp-nav__list" id="tabs"></div>
     <span class="sp-nav__spacer"></span>
-    <button type="button" class="sp-nav__action" id="reload" title="重新加载当前子页面">刷新</button>
-    <button type="button" class="sp-nav__action" id="standalone" title="在新标签页单独打开当前子页面">单独打开</button>
+    <button type="button" class="sp-nav__action" id="reload" title="重新加载当前看板">刷新</button>
+    <button type="button" class="sp-nav__action" id="standalone" title="在新标签页单独打开当前看板">单独打开</button>
   </nav>
   <div class="sp-frame-wrap" id="stage">
     <pre class="sp-state__code" id="diag" hidden style="position:absolute;left:8px;bottom:8px;z-index:9;max-width:70ch;max-height:40vh;overflow:auto;margin:0"></pre>
@@ -31,12 +31,12 @@
 /*
  * 门户壳：导航栏 + iframe + hash 路由。
  *
- * 为什么要壳：DSH 客户端没有 URL 路由（刷新即回到对话、无法收藏），而子页面需要
- * 可收藏、可深链、刷新不丢。壳把「当前在哪个子页面」放进 location.hash，
+ * 为什么要壳：DSH 客户端没有 URL 路由（刷新即回到对话、无法收藏），而看板需要
+ * 可收藏、可深链、刷新不丢。壳把「当前在哪个看板」放进 location.hash，
  * 于是浏览器前进/后退/刷新都是自然行为。
  *
  * 不做的事：
- *   - 不做子页面之间的通信（postMessage 协议刻意不引入）。
+ *   - 不做看板之间的通信（postMessage 协议刻意不引入）。
  *   - 不代理任何数据：iframe 里的页面自己请求 __MOUNT__/<id>/…，由宿主网关转发。
  */
 (function () {
@@ -93,8 +93,8 @@
     var id = currentId();
 
     if (pages.length === 0) {
-      showState('还没有挂载任何子页面',
-        '把子页面目录放进本插件的 pages/ 下（每个目录一个 subpage.json），然后重启 dsh web。');
+      showState('还没有挂载任何看板',
+        '把看板目录放进本插件的 pages/ 下（每个目录一个 subpage.json），然后重启 dsh web。');
       return;
     }
     if (id === null) {
@@ -105,15 +105,15 @@
     var page = null;
     for (var i = 0; i < pages.length; i++) if (pages[i].id === id) page = pages[i];
     if (page === null) {
-      showState('未挂载的子页面：' + id,
+      showState('未挂载的看板：' + id,
         '清单里没有这个 id。可能是目录被删除、清单非法，或 subpage.json 里的 id 与目录名不一致。',
         'GET ' + API_BASE + '/pages');
       return;
     }
     if (health[id] === false) {
-      showState('子页面离线：' + (page.title || page.id),
-        '宿主活着，但它连不上下游服务。请确认该子页面的服务已启动，然后点右上角「刷新」。',
-        page.target ? '目标：' + page.target : '静态子页面（文件缺失）');
+      showState('看板离线：' + (page.title || page.id),
+        '宿主活着，但它连不上下游服务。请确认该看板的服务已启动，然后点右上角「刷新」。',
+        page.target ? '目标：' + page.target : '静态看板（文件缺失）');
       return;
     }
     // 带壳版本查询串：避免浏览器复用旧版本的 iframe 文档。
@@ -139,7 +139,7 @@
       var data = await res.json();
       pages = Array.isArray(data.pages) ? data.pages : [];
     } catch (error) {
-      showState('无法读取子页面清单',
+      showState('无法读取看板清单',
         '宿主网关没有响应。可能是插件未装载，或当前会话已失效（刷新页面重新登录）。',
         String(error && error.message ? error.message : error));
       return;
@@ -193,12 +193,12 @@
     try { url = frame.contentWindow.location.href; } catch (e) { url = '(读不到：' + e.name + ')'; }
     logDiag('iframe load: ' + url);
     if (url === 'about:blank') return;
-    // 能读到内容窗口 = 同源正常；此时若还是空白，就是子页面自身的问题
+    // 能读到内容窗口 = 同源正常；此时若还是空白，就是看板自身的问题
     try {
       var len = (frame.contentDocument && frame.contentDocument.body)
         ? frame.contentDocument.body.innerText.length : -1;
       logDiag('iframe 内容长度: ' + len);
-      if (len === 0) showState('子页面返回了空白内容', 'iframe 已加载但内容为空，请点「单独打开」对比。', url);
+      if (len === 0) showState('看板返回了空白内容', 'iframe 已加载但内容为空，请点「单独打开」对比。', url);
     } catch (e) {
       logDiag('读取 iframe 失败: ' + e.name);
     }

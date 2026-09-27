@@ -6,7 +6,7 @@
  *     `connection.requestRejection` / `logger` / `effect` / `reflect.provide`），
  *     正是为了让「注册了什么路由、是否先过鉴权」可被观测；
  *   - 假下游是一个真的 `node:http` 服务端，用来观察**宿主转发出去的请求头**；
- *   - 静态子页面与门户壳真实落盘再读。
+ *   - 静态看板与门户壳真实落盘再读。
  *
  * 跑法：`cd dsh-subpages && npm test`
  */
@@ -50,7 +50,7 @@ async function startUpstream(handler) {
   return { origin: `http://127.0.0.1:${port}`, seen, close: () => new Promise((r) => server.close(() => r())) }
 }
 
-/** 起一个临时 pages 目录，写入若干子页面清单。 */
+/** 起一个临时 pages 目录，写入若干看板清单。 */
 async function makePages(specs) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-subpages-'))
   for (const [id, manifest, files] of specs) {
@@ -189,7 +189,7 @@ describe('normalizeManifest / publicPage', () => {
     )
   })
 
-  it('相对 target 解析成子页面目录内的静态目录', () => {
+  it('相对 target 解析成看板目录内的静态目录', () => {
     const result = normalizeManifest({ target: './dist' }, { dir, id: 'demo' })
     assert.equal(result.ok, true)
     assert.equal(result.page.target.kind, 'static')
@@ -287,7 +287,7 @@ describe('路径与转发头', () => {
     assert.equal(responseHeaders({ location: '/subpages/notify-hub/todos' }, base).location, '/subpages/notify-hub/todos')
     assert.equal(responseHeaders({ location: '/subpages/notify-hub' }, base).location, '/subpages/notify-hub')
     assert.equal(responseHeaders({ location: '/todos' }, '').location, '/todos')
-    // 子页面自己的「根路径跳转」在网关后面是多余的：直接落在子页面首页
+    // 看板自己的「根路径跳转」在网关后面是多余的：直接落在看板首页
     assert.equal(responseHeaders({ location: '/' }, base).location, '/subpages/notify-hub/')
     assert.equal(responseHeaders({ location: 'next.html' }, base).location, 'next.html')
     // hop-by-hop 仍被丢弃，其余头保留
@@ -296,19 +296,19 @@ describe('路径与转发头', () => {
     assert.equal(headers['content-type'], 'text/html')
   })
 
-  it('injectSharedStyle：inherit 时注入公共样式，并可选压掉子页面自带样式', () => {
+  it('injectSharedStyle：inherit 时注入公共样式，并可选压掉看板自带样式', () => {
     const html = '<html><head><style>body{background:#fff}</style></head><body>x</body></html>'
     const asset = '/subpages/_assets/subpage.css'
 
     // standalone：一个字都不改
     assert.equal(injectSharedStyle(html, { style: 'standalone', assetBase: asset }), html)
 
-    // inherit：注入 <link>，但保留子页面自己的样式（不破坏它的组件类名）
+    // inherit：注入 <link>，但保留看板自己的样式（不破坏它的组件类名）
     const kept = injectSharedStyle(html, { style: 'inherit', assetBase: asset })
     assert.ok(kept.includes(`<link rel="stylesheet" href="${asset}">`), kept.slice(0, 200))
-    assert.ok(kept.includes('<style>body{background:#fff}</style>'), '默认不应删除子页面样式')
+    assert.ok(kept.includes('<style>body{background:#fff}</style>'), '默认不应删除看板样式')
 
-    // inherit + stripOwnStyle：把自己的 <style> 压掉（由子页面显式选择）
+    // inherit + stripOwnStyle：把自己的 <style> 压掉（由看板显式选择）
     const stripped = injectSharedStyle(html, { style: 'inherit', assetBase: asset, stripOwnStyle: true })
     assert.equal(stripped.includes('<style>'), false)
     assert.ok(stripped.includes(`href="${asset}"`))
@@ -417,7 +417,7 @@ describe('网关', () => {
     }
     const root = await makePages(specs)
     const { ctx, routes, provided } = makeCtx({ hold })
-    apply(ctx, { pagesDirs: [root], probeTimeoutMs: 300, requestTimeoutMs: 2000, ...config })
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300, requestTimeoutMs: 2000, ...config })
     // apply 里的 scan 是异步的，等一拍让它落定。
     await new Promise((r) => setTimeout(r, 50))
     return { up, routes, ctx, provided, route: routes[0] }
@@ -481,7 +481,7 @@ describe('网关', () => {
     assert.match(res.body, /sp-nav/)
   })
 
-  it('反代到子页面：路径去掉前缀、主机被改写、**令牌由宿主注入**', async () => {
+  it('反代到看板：路径去掉前缀、主机被改写、**令牌由宿主注入**', async () => {
     const { route, up } = await setup()
     const res = await callRoute(route, { url: '/subpages/svc/api/v1/todos?status=pending', headers: { authorization: 'Bearer BROWSER-VALUE' } })
     assert.equal(res.status, 200)
@@ -493,7 +493,7 @@ describe('网关', () => {
     assert.equal(up.seen[0].headers.authorization, 'Bearer SVC_TOKEN')
   })
 
-  it('静态子页面按目录投递，且拒绝路径穿越', async () => {
+  it('静态看板按目录投递，且拒绝路径穿越', async () => {
     const { route } = await setup()
     const index = await callRoute(route, { url: '/subpages/static-one/' })
     assert.equal(index.status, 200)
@@ -505,7 +505,7 @@ describe('网关', () => {
     assert.equal(escape.status, 404)
   })
 
-  it('style=inherit 的子页面：HTML 响应被注入公共样式', async () => {
+  it('style=inherit 的看板：HTML 响应被注入公共样式', async () => {
     const upstream = (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       res.end('<html><head><title>t</title><style>.card{color:red}</style></head><body>hi</body></html>')
@@ -517,13 +517,13 @@ describe('网关', () => {
     })
     assert.equal(res.status, 200)
     assert.ok(res.body.includes('/subpages/_assets/subpage.css'), '未注入公共样式')
-    // 默认保留子页面自带样式（不破坏它的组件类名）
+    // 默认保留看板自带样式（不破坏它的组件类名）
     assert.ok(res.body.includes('.card{color:red}'))
     // 注入位置在 </head> 之前
     assert.ok(res.body.indexOf('subpage.css') < res.body.indexOf('</head>'))
   })
 
-  it('style=standalone 的子页面：HTML 一字不改', async () => {
+  it('style=standalone 的看板：HTML 一字不改', async () => {
     const upstream = (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       res.end('<html><head></head><body>hi</body></html>')
@@ -556,7 +556,7 @@ describe('网关', () => {
     }
     const { route } = await setup({ upstream })
 
-    // 第一跳：浏览器只看到「跳回该子页面根路径」，且**没有** set-cookie
+    // 第一跳：浏览器只看到「跳回该看板根路径」，且**没有** set-cookie
     const first = await callRoute(route, {
       url: '/subpages/svc/',
       headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' },
@@ -610,14 +610,14 @@ describe('网关', () => {
     const { route } = await setup()
     const res = await callRoute(route, { url: '/subpages/nope/' })
     assert.equal(res.status, 404)
-    assert.match(res.body, /未挂载的子页面/)
+    assert.match(res.body, /未挂载的看板/)
   })
 
   it('下游离线返回 502 + 可读错误页，宿主不受影响', async () => {
     const { route } = await setup()
     const res = await callRoute(route, { url: '/subpages/offline/' })
     assert.equal(res.status, 502)
-    assert.match(res.body, /子页面离线/)
+    assert.match(res.body, /看板离线/)
     // 宿主仍然可用：紧接着请求清单应当正常。
     const list = await callRoute(route, { url: '/subpages/_api/pages' })
     assert.equal(list.status, 200)
@@ -635,8 +635,9 @@ describe('网关', () => {
 
   it('未显式启用时不产生启动通告（不能默认打开）', async () => {
     const { ctx, warnings } = makeCtx()
-    // 不传 startupNotice：apply 应立即返回，不留任何等横幅的后台任务
-    apply(ctx, { pagesDirs: [], startupNotice: undefined })
+    // 不传 startupNotice：apply 应立即返回，不留任何等横幅的后台任务。
+    // pagesDir 指向空目录，避免扫到包内自带的看板。
+    apply(ctx, { pagesDir: await mkdtemp(join(tmpdir(), 'dsh-subpages-empty-')), startupNotice: undefined })
     await new Promise((r) => setTimeout(r, 50))
     assert.equal(warnings.length, 0, '未启用时不该去等横幅或告警')
   })
