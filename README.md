@@ -26,7 +26,7 @@
 
 ```bash
 # 本机开发（符号链接，改完即生效）
-dsh plugin --profile web add /workspace/deepseek_workspace/dsh-subpages
+dsh plugin --profile web add "$PWD"     # 在仓库根目录执行
 
 # 别的机器（锁 commit）
 dsh plugin --profile web add "git+https://github.com/<你>/dsh-subpages#<sha>"
@@ -50,7 +50,7 @@ dsh plugin --profile web add "git+https://github.com/<你>/dsh-subpages#<sha>"
   "health": "/healthz",
   "style": "standalone",
   "auth": {
-    "tokenFile": "/root/notify-hub-run/config.yaml",
+    "tokenFile": "~/notify-hub-run/config.yaml",
     "tokenPath": "server.auth_token",
     "queryParam": "token"
   }
@@ -142,8 +142,8 @@ ctx.subPages.mountPath     // '/subpages'
   config:
     startupNotice:
       enabled: true                             # 必须显式打开
-      publicHost: 47.109.102.36                 # 对外主机（IP 或域名）
-      tokenFile: /root/notify-hub-run/config.yaml
+      publicHost: dsh.example.com               # 对外主机（IP 或域名，按需替换）
+      tokenFile: ~/notify-hub-run/config.yaml  # 支持 ~ 与环境变量展开
       tokenPath: server.auth_token              # 凭据直接读下游自己的配置，不新增一份
       logPath: /tmp/dsh-web.log                 # 启动横幅所在文件
 ```
