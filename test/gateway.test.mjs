@@ -25,6 +25,7 @@ import {
   readTokenFromFile,
   scanPagesDir,
   SubPageRegistry,
+  expandEnvPlaceholders,
 } from '../lib/registry.mjs'
 import { forwardHeaders, injectSharedStyle, resolveWithin, responseHeaders, rewriteRootPaths, subPathOf } from '../lib/proxy.mjs'
 import { readWebAsset, renderShell } from '../lib/assets.mjs'
@@ -209,6 +210,49 @@ describe('normalizeManifest / publicPage', () => {
     assert.deepEqual(Object.keys(projected).sort(), [
       'description', 'health', 'hidden', 'icon', 'id', 'order', 'style', 'target', 'title',
     ])
+  })
+})
+
+describe('expandEnvPlaceholders', () => {
+  it('展开 $VAR 与 ${VAR} 两种写法', () => {
+    const env = { A: 'one', B: '/x/y.yaml' }
+    assert.equal(expandEnvPlaceholders('$A', env), 'one')
+    assert.equal(expandEnvPlaceholders('${A}', env), 'one')
+    assert.equal(expandEnvPlaceholders('$A/$B', env), 'one//x/y.yaml')
+    assert.equal(expandEnvPlaceholders('/p/${A}/q', env), '/p/one/q')
+  })
+
+  it('未定义的变量展开为空串（让"没配"表现为可诊断的取不到，而不是假路径）', () => {
+    assert.equal(expandEnvPlaceholders('$MISSING', {}), '')
+    assert.equal(expandEnvPlaceholders('/a/${MISSING}/b', {}), '/a//b')
+  })
+
+  it('不含 $ 的字符串原样返回（不做无谓处理）', () => {
+    assert.equal(expandEnvPlaceholders('/plain/path.yaml', {}), '/plain/path.yaml')
+    assert.equal(expandEnvPlaceholders('', {}), '')
+  })
+})
+
+describe('扫描时解析令牌来源（含占位与 ~）', () => {
+  it('tokenFile 用 $VAR 占位，按运行环境展开', async () => {
+    const root = await makePages([
+      ['svc', { target: 'http://127.0.0.1:9001', auth: { tokenFile: '$MYCFG', tokenPath: 'server.auth_token' } }, {}],
+    ])
+    const cfgDir = await mkdtemp(join(tmpdir(), 'svc-cfg-'))
+    const cfg = join(cfgDir, 'config.yaml')
+    await writeFile(cfg, 'server:  { host: 127.0.0.1, auth_token: from-placeholder }\n')
+    const { pages } = await scanPagesDir(root, { env: { MYCFG: cfg } })
+    assert.equal(pages[0].token, 'from-placeholder')
+  })
+
+  it('占位变量未定义时不报错，只是取不到令牌（可诊断的降级）', async () => {
+    const root = await makePages([
+      ['svc', { target: 'http://127.0.0.1:9001', auth: { tokenFile: '$UNDEFINED_VAR_X', tokenPath: 'server.auth_token' } }, {}],
+    ])
+    const warnings = []
+    const { pages } = await scanPagesDir(root, { env: {}, logger: { warn: (m) => warnings.push(m) } })
+    assert.equal(pages[0].token, null)
+    assert.ok(warnings.some((w) => /取不到令牌/.test(w)), warnings.join('\n'))
   })
 })
 

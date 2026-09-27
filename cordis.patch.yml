@@ -1,28 +1,34 @@
 # dsh-subpages bundle patch（package.json 的 dsh.bundle.patch 指向本文件）
 #
-# 这个文件是本插件作为一个 profile 层级的全部声明：一行 insert。
+# 这个文件是本插件作为一个 profile 层级的声明：一行 insert。
 # 通过官方 CLI 安装时（dsh plugin --profile web add <spec>），`dsh plugin` 会把包名
 # 追加进 profile 的 dsh.profile.bundles —— 不需要手改 profile 任何文件。
 #
-# 可选配置（也可用环境变量覆盖，见 README「配置」）：
+# ⚠️ 本文件**刻意不含任何机器相关的取值**（主机名、IP、绝对路径、令牌）。
+#    它是随包发布的默认层：别人 clone/安装后应当直接可用，而不是继承某个人的机器布局。
+#    与部署环境相关的配置一律写在使用者自己的 profile 里：
 #
-#   - insert:
-#       - id: subpages
-#         name: dsh-subpages
-#         config:
-#           mountPath: /subpages      # 网关前缀，默认 /subpages
-#           pagesDirs: []             # 额外的看板目录（绝对路径），默认只用包内 pages/
-#           requestTimeoutMs: 15000   # 转发到看板的超时
+#      ~/.dsh/profiles/web/cordis.patch.yml
+#
+#    例如（按需取消注释并填入你自己的值）：
+#
+#      - id: subpages
+#        config:
+#          mountPath: /subpages          # 网关前缀，默认 /subpages
+#          pagesDir: /abs/path           # 覆盖包内 pages/（单个）
+#          pagesDirs: [/abs/extra]       # 追加的看板目录（多个）
+#          requestTimeoutMs: 15000        # 转发到看板的超时
+#          probeTimeoutMs: 2000           # 探活超时
+#          startupNotice:                 # 每次 DSH 启动把带 token 的链接投递到通知中心
+#            enabled: true
+#            publicHost: dsh.example.com  # 对外主机（IP 或域名）
+#            tokenFile: /path/to/notify-hub/config.yaml
+#            tokenPath: server.auth_token
+#            logPath: /tmp/dsh-web.log    # 启动横幅所在文件
+#
+#    看板清单里的路径支持 `$VAR` 与 `~` 占位（如 `tokenFile: "$NOTIFY_HUB_CONFIG"`），
+#    这样清单本身可以随看板仓库开源，而"下游配置在哪"由运行环境决定。
 #
 - insert:
     - id: subpages
       name: dsh-subpages
-      config:
-        # 每次 DSH 启动把「带 token 的访问链接」投递到 notify-hub（进而转发到飞书）。
-        # 凭据不新增：直接从 notify-hub 自己的 config.yaml 里读。
-        startupNotice:
-          enabled: true
-          publicHost: 47.109.102.36                 # 对外主机（IP 或域名）
-          tokenFile: /root/notify-hub-run/config.yaml
-          tokenPath: server.auth_token
-          logPath: /tmp/dsh-web.log                 # 启动横幅所在文件（run-dsh.sh 重定向到此）
