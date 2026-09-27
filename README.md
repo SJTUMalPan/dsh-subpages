@@ -1,16 +1,32 @@
 # dsh-subpages
 
-**DSH 看板宿主**：把独立开发的下级网页应用挂到 DSH 自己的端口上，用一个统一的门户访问它们。
+**DSH 看板宿主**：把一个个独立开发的小网页应用，变成 DSH 里的「看板」——挂在 DSH 自己的
+端口下、共用 DSH 的登录态、用一个门户统一进入。不必为新页面单独开端口、单独配域名、
+单独做一套鉴权。
 
-- **不新开监听端口**：网关是 DSH `webServer` 上的一个前缀路由（默认 `/subpages`），
-  跟 DSH 主界面共用同一个端口与登录态。
-- **看板独立开发**：每个看板是独立仓库/目录，自己监听本地端口（或纯静态），
-  宿主只做 HTTP 转发。
-- **一键挂载**：`git submodule add <看板仓库> pages/<id>`，重启 `dsh web` 即可，**不用改宿主代码**。
-  约定：每块看板的清单 `subpage.json` 放在**它自己的仓库根目录**，`pages/` 下一律是
-  submodule 指针 —— 详情见 [`pages/README.md`](pages/README.md)。
+好处：
+
+- **不新开监听端口、不新增暴露面**：网关只是 DSH `webServer` 上的一个前缀路由
+  （默认 `/subpages`），与主界面共用端口；每个请求先过 DSH 自己的鉴权，
+  浏览器侧看不到下游令牌，下游也拿不到 DSH 凭据。
+- **看板各管各的**：每块看板是独立仓库（自选技术栈、自己发版、自己鉴权），宿主只做转发与
+  门户；`git submodule add <看板仓库> pages/<id>` + 重启 `dsh web` 即挂上，**不改宿主代码**。
+  清单 `subpage.json` 放在看板**自己的仓库根目录**，`pages/` 下一律是 submodule 指针——
+  详见 [`pages/README.md`](pages/README.md)。
+- **风格统一**：内置公共样式表（Pico classless + 深色 token + `sp-*` 组件类），
+  看板引一个 `<link>` 就跟门户一致，不必自己搭一套设计系统。
 - **真 URL**：`/subpages/notify-hub/todos` 可收藏、可深链、刷新不丢
   （DSH 客户端自身没有路由，这一点是它补上的）。
+
+## 自带的两个看板（`pages/`，均为 submodule）
+
+| 看板 | 独立仓库 | 挂载形态 | 是什么 |
+|---|---|---|---|
+| **待办** | [SJTUMalPan/notify-hub](https://github.com/SJTUMalPan/notify-hub) | **代理**：它自带 FastAPI 服务；宿主把浏览器带来的 `?token=` 换成服务端持有的会话，浏览器全程看不到令牌 | 消息汇聚与待办跟踪：各进程投递消息 → 分类 → 落待办 → 飞书 / webhook / 邮件推送，超时未确认会提醒 |
+| **用量** | [SJTUMalPan/dsh-usage-stats](https://github.com/SJTUMalPan/dsh-usage-stats) | **静态**：宿主直接投递生成好的单文件仪表盘 | DSH 各工程 / 会话 / 步骤的 token、缓存与花费统计（零依赖离线工具 + 单文件 HTML，`standalone` 样式） |
+
+它们刚好覆盖宿主的**两种形态**（代理 / 静态）与**两种样式策略**（`inherit` / `standalone`），
+所以既是能用的页面，也是照抄即可的接入范例。
 
 ## 架构
 
