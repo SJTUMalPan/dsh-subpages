@@ -256,6 +256,65 @@ describe('扫描时解析令牌来源（含占位与 ~）', () => {
   })
 })
 
+describe('auth 的候选来源（tokenFileCandidates）', () => {
+  it('按顺序尝试：第一个取不到就退到下一个', async () => {
+    const cfgDir = await mkdtemp(join(tmpdir(), 'cand-'))
+    const good = join(cfgDir, 'config.yaml')
+    await writeFile(good, 'server:  { auth_token: from-second-candidate }\n')
+    const root = await makePages([
+      ['svc', {
+        target: 'http://127.0.0.1:9001',
+        auth: { tokenFileCandidates: ['/nonexistent/first.yaml', good], tokenPath: 'server.auth_token' },
+      }, {}],
+    ])
+    const { pages } = await scanPagesDir(root, { env: {} })
+    assert.equal(pages[0].token, 'from-second-candidate')
+  })
+
+  it('占位变量未定义时跳过该候选（不当成路径去读）', async () => {
+    const cfgDir = await mkdtemp(join(tmpdir(), 'cand2-'))
+    const good = join(cfgDir, 'config.yaml')
+    await writeFile(good, 'server:  { auth_token: fallback-hit }\n')
+    const root = await makePages([
+      ['svc', {
+        target: 'http://127.0.0.1:9001',
+        auth: { tokenFileCandidates: ['$UNDEFINED_XYZ', good], tokenPath: 'server.auth_token' },
+      }, {}],
+    ])
+    const { pages } = await scanPagesDir(root, { env: {} })
+    assert.equal(pages[0].token, 'fallback-hit')
+  })
+
+  it('tokenFile 优先于 candidates', async () => {
+    const cfgDir = await mkdtemp(join(tmpdir(), 'cand3-'))
+    const first = join(cfgDir, 'a.yaml')
+    const second = join(cfgDir, 'b.yaml')
+    await writeFile(first, 'server:  { auth_token: from-primary }\n')
+    await writeFile(second, 'server:  { auth_token: from-candidate }\n')
+    const root = await makePages([
+      ['svc', {
+        target: 'http://127.0.0.1:9001',
+        auth: { tokenFile: first, tokenFileCandidates: [second], tokenPath: 'server.auth_token' },
+      }, {}],
+    ])
+    const { pages } = await scanPagesDir(root, { env: {} })
+    assert.equal(pages[0].token, 'from-primary')
+  })
+})
+
+describe('候选来源的相对路径解析', () => {
+  it('相对路径按清单所在目录解析（不是进程 cwd）', async () => {
+    const root = await makePages([
+      ['svc', {
+        target: 'http://127.0.0.1:9001',
+        auth: { tokenFileCandidates: ['./config.yaml'], tokenPath: 'server.auth_token' },
+      }, { 'config.yaml': 'server:  { auth_token: relative-to-manifest }\n' }],
+    ])
+    const { pages } = await scanPagesDir(root, { env: {} })
+    assert.equal(pages[0].token, 'relative-to-manifest')
+  })
+})
+
 describe('scanPagesDir', () => {
   it('扫描出合法清单；坏清单只记错误不抛异常', async () => {
     const root = await makePages([
