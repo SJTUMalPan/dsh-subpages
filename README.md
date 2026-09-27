@@ -6,7 +6,9 @@
   跟 DSH 主界面共用同一个端口与登录态。
 - **看板独立开发**：每个看板是独立仓库/目录，自己监听本地端口（或纯静态），
   宿主只做 HTTP 转发。
-- **一键挂载**：放一个目录 + 一份 `subpage.json`，重启 `dsh web` 即可，**不用改宿主代码**。
+- **一键挂载**：`git submodule add <看板仓库> pages/<id>`，重启 `dsh web` 即可，**不用改宿主代码**。
+  约定：每块看板的清单 `subpage.json` 放在**它自己的仓库根目录**，`pages/` 下一律是
+  submodule 指针 —— 详情见 [`pages/README.md`](pages/README.md)。
 - **真 URL**：`/subpages/notify-hub/todos` 可收藏、可深链、刷新不丢
   （DSH 客户端自身没有路由，这一点是它补上的）。
 

@@ -36,14 +36,28 @@ pages/
 | `style` | 否 | `inherit`（宿主注入公共样式）或 `standalone` |
 | `stripOwnStyle` | 否 | 仅 `inherit` 有意义：压掉看板自带的 `<style>` |
 | `hidden` | 否 | 不在导航栏显示 |
-| `auth` | 否 | 下游凭据：`tokenEnv`，或 `tokenFile` + `tokenPath`，配 `header`/`scheme` 或 `queryParam` |
+| `auth` | 否 | 下游凭据：`tokenEnv`，或 `tokenFileCandidates`（数组，按序尝试；单词场景可写 `tokenFile`）+ `tokenPath`，配 `header`/`scheme` 或 `queryParam` |
 
-**清单要开源，所以不要写死机器路径**：`tokenFile` 与静态 `target` 支持
-`$VAR` / `${VAR}` 与环境无关的 `~` 展开，例如：
+**清单要开源，所以不要写死机器路径**：凭据来源与静态 `target` 都支持
+`$VAR` / `${VAR}` 与 `~` 展开；凭据来源还可以给**多个候选**，按序尝试、取到即用：
 
 ```json
-"auth": { "tokenFile": "$NOTIFY_HUB_CONFIG", "tokenPath": "server.auth_token", "queryParam": "token" }
+"auth": {
+  "tokenFileCandidates": [
+    "$NOTIFY_HUB_CONFIG",              // 部署时设定的位置（优先）
+    "~/notify-hub-run/config.yaml",    // 该服务的约定默认位置
+    "./config.yaml"                    // 相对路径 = 相对**清单所在目录**
+  ],
+  "tokenPath": "server.auth_token",
+  "queryParam": "token"
+}
 ```
+
+约定细节：
+
+- 占位变量**未定义时跳过该候选**，不会被当成一个字面路径去读；
+- 相对路径按**清单所在目录**解析（不是进程 cwd），与下游服务解析自身 `db_path`/`rules_path` 的约定一致；
+- 单词场景写 `tokenFile: "..."` 即可，它等价于只有一个元素的 `tokenFileCandidates`。
 
 ## 加一块新看板
 
