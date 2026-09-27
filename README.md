@@ -28,8 +28,11 @@
 # 本机开发（符号链接，改完即生效）
 dsh plugin --profile web add "$PWD"     # 在仓库根目录执行
 
-# 别的机器（锁 commit）
-dsh plugin --profile web add "git+https://github.com/<你>/dsh-subpages#<sha>"
+# 从 GitHub 装（别人/别的机器；插件市场里也能直接装）
+dsh plugin --profile web add github:SJTUMalPan/dsh-subpages
+
+# 锁 commit（可复现）
+dsh plugin --profile web add "git+https://github.com/SJTUMalPan/dsh-subpages#<sha>"
 ```
 
 装完**重启** `dsh web`。之后侧边栏底部会出现「看板」按钮，点开即门户。
