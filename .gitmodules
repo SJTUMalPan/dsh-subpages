@@ -1,6 +1,6 @@
 [submodule "pages/usage-stats"]
 	path = pages/usage-stats
-	url = git@github.com:SJTUMalPan/dsh-usage-stats.git
+	url = https://github.com/SJTUMalPan/dsh-usage-stats.git
 [submodule "pages/notify-hub"]
 	path = pages/notify-hub
-	url = git@github.com:SJTUMalPan/notify-hub.git
+	url = https://github.com/SJTUMalPan/notify-hub.git
