@@ -709,6 +709,68 @@ describe('网关', () => {
     assert.equal(seen[2].auth, 'Bearer SVC_TOKEN', '重试应改用令牌')
   })
 
+  it('转发 URL 里剥掉浏览器的 token 查询参数（凭证不透传）', async () => {
+    const up = await openUpstream()
+    const root = await makePages([['svc', { target: up.origin, title: 'S' }, {}]])
+    const { ctx, routes } = makeCtx()
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    const res = await callRoute(routes[0], { url: '/subpages/svc/api/x?token=DSH-LAUNCH-TOKEN&keep=1' })
+    assert.equal(res.status, 200)
+    assert.equal(up.seen[0].url.includes('DSH-LAUNCH-TOKEN'), false, `token 被转发给下游：${up.seen[0].url}`)
+    assert.equal(up.seen[0].url.includes('token='), false, `仍带 token 参数：${up.seen[0].url}`)
+    assert.ok(up.seen[0].url.includes('keep=1'), '其它查询参数应保留')
+  })
+
+  it('转发头是白名单：cookie 与 authorization 默认不透传', async () => {
+    const up = await openUpstream()
+    const root = await makePages([['svc', { target: up.origin, title: 'S' }, {}]])
+    const { ctx, routes } = makeCtx()
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    await callRoute(routes[0], {
+      url: '/subpages/svc/x',
+      headers: { cookie: 'dsh-auth-abc=secret-session', authorization: 'Bearer browser-token', accept: 'text/html', 'user-agent': 'test-agent' },
+    })
+    assert.equal(up.seen[0].headers.cookie, undefined, `cookie 被透传：${up.seen[0].headers.cookie}`)
+    assert.equal(up.seen[0].headers.authorization, undefined, 'authorization 被透传')
+    assert.equal(up.seen[0].headers.accept, 'text/html', '必要的 accept 应保留')
+    assert.equal(up.seen[0].headers['user-agent'], 'test-agent', 'user-agent 应保留')
+  })
+
+  it('下游 auth 声明的凭据仍由宿主注入（白名单不挡服务端凭据）', async () => {
+    const up = await openUpstream()
+    const root = await makePages([['svc', { target: up.origin, auth: { tokenEnv: 'SVC_TOKEN' } }, {}]])
+    const { ctx, routes } = makeCtx()
+    process.env.SVC_TOKEN = 'SERVER-SIDE-TOKEN'
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    await callRoute(routes[0], { url: '/subpages/svc/x', headers: { authorization: 'Bearer browser-token' } })
+    assert.equal(up.seen[0].headers.authorization, 'Bearer SERVER-SIDE-TOKEN')
+  })
+
+  it('静态看板目录里的软链不得越界读取', async () => {
+    const { symlink } = await import('node:fs/promises')
+    const root = await makePages([['static-one', { target: './public', title: 'S' }, { 'public/index.html': 'ok' }]])
+    await symlink('/etc/passwd', join(root, 'static-one', 'public', 'escape.txt'))
+    const { ctx, routes } = makeCtx()
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    const res = await callRoute(routes[0], { url: '/subpages/static-one/escape.txt' })
+    assert.equal(res.status, 404, `软链越界被放行，读到：${res.body.slice(0, 40)}`)
+  })
+
+  it('看板可显式声明要额外透传的请求头（白名单出口）', async () => {
+    const up = await openUpstream()
+    const root = await makePages([['svc', { target: up.origin, forwardHeaders: ['x-custom-trace'] }, {}]])
+    const { ctx, routes } = makeCtx()
+    apply(ctx, { pagesDir: root, probeTimeoutMs: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    await callRoute(routes[0], { url: '/subpages/svc/x', headers: { 'x-custom-trace': 'T-1', cookie: 'nope' } })
+    assert.equal(up.seen[0].headers['x-custom-trace'], 'T-1', '声明的头应透传')
+    assert.equal(up.seen[0].headers.cookie, undefined, '未声明的 cookie 仍不透传')
+  })
+
   it('未注册 id 返回 404 且是明确的错误页', async () => {
     const { route } = await setup()
     const res = await callRoute(route, { url: '/subpages/nope/' })
